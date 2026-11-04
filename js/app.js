@@ -281,6 +281,9 @@
     if (/备用电源|电池主机|蓄电池|UPS/i.test(n)) return 'backupPower';
     if (/报警联动一体机|联动一体机|一体机/.test(n)) return 'integrated';
     if (/机柜|机架/.test(n)) return 'cabinet';
+    // 其他类型主机兜底（电气火灾监控主机、消防电源监控主机、防火门监控主机、可燃气体报警主机等）
+    // 按火灾报警系统控制主机 030904012 口径 + 市场价计列，结果表提示核对清单编码
+    if (/主机|监控器|控制盘/.test(n)) return 'fireHost';
     if (/按钮|手报/.test(n)) return 'btn';
     // ---- 消防水 ----
     if (/水灭火控制装置调试|灭火系统调试|系统调试/.test(n)) return 'fireDebug';
@@ -878,6 +881,7 @@
       it.routes = it.routes || 3;
       it.unit = '台';
     } else if (cat === 'fireHost') {
+      it.genericHost = !/火灾报警.*(控制主机|主机)|报警控制主机|火灾报警主机/.test(s);
       it.unit = '台';
     } else if (cat === 'linkageHost') {
       it.wireMode = /多线制/.test(s) ? 'multi' : 'bus';
@@ -1643,8 +1647,13 @@
     var p = tierVal(def, dd.v);
     if (p === null) return { price: null, source: 'pending', basis: '价格库缺少对应档位，请询价后填入', brand: def.brand || '' };
     var basis = (def.label || F_LABEL[it.category]) + '：' + (def.brand || '') + '，' + Number(p).toFixed(2) + '元/' + (def.unit || it.unit);
+    var brandOut = def.brand || '';
+    if (it.genericHost) {
+      basis = '其他类型主机（按火灾报警系统控制主机市场价计）：' + (def.brand || '') + '，' + Number(p).toFixed(2) + '元/' + (def.unit || it.unit);
+      brandOut = '按火灾报警控制主机市场价参考（成套设备，' + Number(p).toFixed(0) + '元/台）';
+    }
     if (def.tiers && dd.v) basis += '（按' + dd.v + '就近取档）';
-    return { price: Number(p), source: def.source === 'official' ? 'official' : 'market', basis: basis, brand: def.brand || '' };
+    return { price: Number(p), source: def.source === 'official' ? 'official' : 'market', basis: basis, brand: brandOut };
   }
   function elecPrice(it, periodKey) {
     var FP = firePriceTable(periodKey);
@@ -1725,12 +1734,12 @@
     if (it.isFire) {
       var ff = [];
       ff.push('名称:' + it.name);
-      ff.push('类型:' + (F_LABEL[it.category] || '消防'));
+      ff.push('类型:' + (it.genericHost ? '其他类型主机（按火灾报警口径）' : (F_LABEL[it.category] || '消防')));
       var fsp = fireSpecText(it);
       if (fsp && fsp !== '—') ff.push('规格型号:' + fsp);
       if (it.priceBrand) ff.push('品牌参考:' + it.priceBrand);
       else if (it.priceSource === 'info') ff.push('品牌参考:信息价（不标品牌）');
-      ff.push('其他:' + (F_WORK[it.category] || ''));
+      ff.push('其他:' + (it.genericHost ? '主机安装、接线、系统调试（按补充定额计列，请核对清单编码与基价）' : (F_WORK[it.category] || '')));
       return ff.join('；');
     }
     if (isAuxCat(it.category)) {
@@ -1804,6 +1813,7 @@
     }
     if (quota && quota.crossVol) w.push('定额 ' + quota.code + ' 属' + quota.crossVol + '，跨册套用请核对册说明');
     if (quota && quota.manual) w.push('火灾报警系统控制主机无对应定额子目，已按补充定额计列，需人工补充基价并确认');
+    if (it.genericHost) w.push('该主机类型未在标准清单子目中，已按 030904012 火灾报警系统控制主机口径 + 市场价计列，请核对清单编码与设备价');
     if (it.priceSource === 'manual') w.push('主材价需人工输入（设备品牌规格差异大，价格库不预设）');
     if (c === 'sprinkler') w.push('喷头按' + (it.ceiling === 'open' ? '无吊顶 7-10' : '有吊顶 7-11') + '计列，可在「选项」列切换有/无吊顶');
     if (c === 'hydrantIn') w.push('按' + (it.hydrantKind === 'dual' ? '双栓 7-54' : '单栓 7-53') + '计列，可在「选项」列切换单/双栓');
@@ -2086,7 +2096,10 @@
     return '—';
   }
   function itTypeOf(it) {
-    if (it.isFire) return F_LABEL[it.category] || '消防';
+    if (it.isFire) {
+      if (it.genericHost) return '其他类型主机（按火灾报警口径）';
+      return F_LABEL[it.category] || '消防';
+    }
     if (isAuxCat(it.category)) return AUX_LABEL[it.category];
     if (isValveCat(it.category)) return V_LABEL[it.category];
     return '管道';
