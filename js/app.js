@@ -483,35 +483,49 @@
     return t[t.length - 1].w;
   }
   // 管道清单全部套完后自动补「管道支架」一行；原表已含支架则不重复
+  // 管道支架：按系统分别补项（系统来自清单里的分组标题行，如「喷淋管道」「消火栓管道」；
+  // 无分组标题时全表算一个系统），每个系统在其最后一条管道清单之后插入一条支架
   function withBracket(items) {
-    var totalM = 0, kg = 0, hasPipe = false, hasBracket = false;
-    items.forEach(function (it) {
-      if (it.category === 'bracket') hasBracket = true;
-      if (isAuxCat(it.category) || isValveCat(it.category)) return;
+    var hasBracket = false;
+    for (var i = 0; i < items.length; i++) if (items[i].category === 'bracket') hasBracket = true;
+    if (hasBracket) return items;
+    var order = [], map = {};
+    for (var j = 0; j < items.length; j++) {
+      var it = items[j];
+      var key = it.system || '';
+      if (!map[key]) { map[key] = { key: key, lastPipe: -1, len: 0, kg: 0 }; order.push(map[key]); }
+      if (isAuxCat(it.category) || isValveCat(it.category)) continue;
       // 仅按管道（含消防水管道）长度估算支架；消防设备、配管配线桥架不计
       var isPipeRow = it.category === 'galv' || it.category === 'castIron' || !!PIPE_GROUPS[it.category];
-      if (!isPipeRow) return;
-      if (!(it.quantity > 0)) return;
-      hasPipe = true;
-      totalM += it.quantity;
-      kg += it.quantity * bracketWeightPerM(it.dn);
+      if (!isPipeRow) continue;
+      if (!(it.quantity > 0)) continue;
+      map[key].lastPipe = j;
+      map[key].len += it.quantity;
+      map[key].kg += it.quantity * bracketWeightPerM(it.dn);
+    }
+    var groups = order.filter(function (g) { return g.lastPipe >= 0 && g.kg > 0; });
+    if (!groups.length) return items;
+    // 从后往前插，避免插入后前面分组的下标失效
+    groups.sort(function (a, b) { return b.lastPipe - a.lastPipe; });
+    groups.forEach(function (g) {
+      var kg = Math.round(g.kg * 10) / 10;
+      if (!(kg > 0)) return;
+      var it = buildAuxItem('管道支架', 'bracket');
+      it.index = '';
+      it.quantity = kg;
+      it.loc = null; it.joint = null;
+      var q = matchAuxQuota(it);
+      it.quotaCode = q.code; it.quotaName = q.name; it.quotaUnit = q.unit; it.quotaFactor = q.factor;
+      it.codeInferred = false; it.extras = [];
+      var pr = auxPrice(it);
+      it.price = pr.price; it.priceSource = pr.source; it.priceBasis = pr.basis; it.priceBrand = pr.brand || '';
+      it.system = g.key;
+      it.autoAdded = true;
+      it.warn = '管道支架为自动补项' + (g.key ? '（' + g.key + '）' : '') + '：按管道总长 ' + Math.round(g.len) +
+        'm 与管径分档含量估算约 ' + kg + 'kg（0.45~3.2kg/m），定额 7-138 计量单位为 100kg，请按图纸支架实际重量调整';
+      it.features = featureText(it);
+      items.splice(g.lastPipe + 1, 0, it);
     });
-    if (!hasPipe || hasBracket) return items;
-    kg = Math.round(kg * 10) / 10;
-    if (!(kg > 0)) return items;
-    var it = buildAuxItem('管道支架', 'bracket');
-    it.index = String(items.length + 1);
-    it.quantity = kg;
-    it.loc = null; it.joint = null;
-    var q = matchAuxQuota(it);
-    it.quotaCode = q.code; it.quotaName = q.name; it.quotaUnit = q.unit; it.quotaFactor = q.factor;
-    it.codeInferred = false; it.extras = [];
-    var pr = auxPrice(it);
-    it.price = pr.price; it.priceSource = pr.source; it.priceBasis = pr.basis; it.priceBrand = pr.brand || '';
-    it.warn = '管道支架为自动补项：按管道总长 ' + Math.round(totalM) + 'm 与管径分档含量估算约 ' + kg +
-      'kg（0.45~3.2kg/m），定额 7-138 计量单位为 100kg，请按图纸支架实际重量调整';
-    it.features = featureText(it);
-    items.push(it);
     return items;
   }
 
@@ -520,6 +534,93 @@
   //       start 首个子目号；dns 依次对应的管径档；name 子目名称
   var GROOVE_FITTING = { start: 220, dns: [65, 80, 100, 125, 150, 200, 250], name: '室内管道 钢管沟槽连接管件', unit: '10个', factor: 10 };
   var PIPE_FLUSH = { start: 490, dns: [50, 100, 200, 300, 400, 500], name: '管道消毒冲洗', unit: '100m', factor: 100 };
+
+  // ---------- 消防水钢管：喷淋管道 / 消火栓管道（页面单选）----------
+  // 清单：消火栓钢管 030901002 / 水喷淋钢管 030901001
+  // 定额：消火栓一律沟槽连接 8-206~8-212；喷淋 DN≥65 同消火栓，DN<65 走 7-1~7-4 螺纹连接
+  // 附加：沟槽管件 8-220~8-226 重复三次（弯头/三通/卡箍，人工改数量）；
+  //       消火栓冲洗 8-490~8-495，喷淋冲洗 7-70~7-75（喷淋专属，区别于给排水/消火栓）
+  var FIRE_PIPE_SYS = 'sprinkler';   // 'sprinkler' 喷淋管道 | 'hydrant' 消火栓管道
+  var FIRE_PIPE_LIST = {
+    sprinkler: { code: '030901001', name: '水喷淋钢管' },
+    hydrant: { code: '030901002', name: '消火栓钢管' }
+  };
+  var FIRE_PIPE_DNS = [65, 80, 100, 125, 150, 200, 250];              // 8-206~8-212 室内管道 钢管(沟槽连接)
+  var SPRINKLER_THREAD = { start: 1, dns: [25, 32, 40, 50], name: '水喷淋镀锌钢管（螺纹连接）', unit: '10m', factor: 10 };
+  var SPRINKLER_FLUSH = { start: 70, dns: [50, 65, 80, 100, 150, 200], name: '自动喷水灭火系统管网水冲洗', unit: '100m', factor: 100 };
+
+  // 'sprinkler' 喷淋管道 / 'hydrant' 消火栓管道 / 'plumb' 通用给排水口径（不套消防清单，内部与测试用）
+  function setFirePipeSystem(v) {
+    FIRE_PIPE_SYS = (v === 'hydrant') ? 'hydrant' : ((v === 'plumb') ? 'plumb' : 'sprinkler');
+  }
+  function getFirePipeSystem() { return FIRE_PIPE_SYS; }
+
+  // 消防水钢管定额：消火栓一律沟槽；喷淋 ≥DN65 沟槽、<DN65 螺纹
+  function matchFirePipeQuota(it) {
+    var dn = it.dn;
+    var hydrant = (it.pipeSystem || FIRE_PIPE_SYS) === 'hydrant';
+    if (!(dn > 0)) {
+      return { code: '', name: (hydrant ? '消火栓钢管' : '水喷淋钢管') + '（管径待识别）', inferred: false, needDn: true };
+    }
+    if (hydrant || dn >= 65) {
+      var t = tierOf(FIRE_PIPE_DNS, dn);
+      return {
+        code: '8-' + (206 + t.idx),
+        name: '室内管道 钢管(沟槽连接) 公称直径' + t.dn + 'mm以内',
+        inferred: !t.exact, dnTier: t.dn, unit: '10m', factor: 10, joint: 'groove'
+      };
+    }
+    var t2 = tierOf(SPRINKLER_THREAD.dns, dn);
+    return {
+      code: '7-' + (SPRINKLER_THREAD.start + t2.idx),
+      name: SPRINKLER_THREAD.name + ' 公称直径' + t2.dn + 'mm以内',
+      inferred: !t2.exact, dnTier: t2.dn, unit: SPRINKLER_THREAD.unit, factor: SPRINKLER_THREAD.factor, joint: 'thread'
+    };
+  }
+
+  // 消防水钢管附加定额：沟槽管件 ×3 + 冲洗 ×1（消火栓 8-49x / 喷淋 7-7x）
+  function buildFirePipeExtras(it, quota) {
+    var arr = [];
+    if (!quota || !quota.code) return arr;
+    var hydrant = (it.pipeSystem || FIRE_PIPE_SYS) === 'hydrant';
+    var tierDn = quota.dnTier || it.dn;
+    var groove = hydrant || (it.dn || 0) >= 65;
+    if (groove) {
+      var f = tierOf(GROOVE_FITTING.dns, tierDn);
+      if (f) {
+        var cnt = Math.max(1, Math.ceil((it.quantity || 0) / 6));
+        for (var k = 0; k < 3; k++) {
+          arr.push({
+            role: 'fitting', code: '8-' + (GROOVE_FITTING.start + f.idx),
+            name: GROOVE_FITTING.name + ' 公称直径' + f.dn + 'mm以内',
+            unit: GROOVE_FITTING.unit, factor: GROOVE_FITTING.factor,
+            qty: cnt,
+            note: '管件第' + (k + 1) + '项（依次对应弯头/三通/卡箍，请按图纸实际数量调整）；现按6m定尺估算'
+          });
+        }
+      }
+    }
+    if (hydrant) {
+      var fl = tierOf(PIPE_FLUSH.dns, tierDn);
+      if (fl) {
+        arr.push({
+          role: 'flush', code: '8-' + (PIPE_FLUSH.start + fl.idx),
+          name: PIPE_FLUSH.name + ' 公称直径' + fl.dn + 'mm以内',
+          unit: PIPE_FLUSH.unit, factor: PIPE_FLUSH.factor, qty: it.quantity, note: ''
+        });
+      }
+    } else {
+      var sf = tierOf(SPRINKLER_FLUSH.dns, tierDn);
+      if (sf) {
+        arr.push({
+          role: 'flush', code: '7-' + (SPRINKLER_FLUSH.start + sf.idx),
+          name: SPRINKLER_FLUSH.name + ' 公称直径' + sf.dn + 'mm以内',
+          unit: SPRINKLER_FLUSH.unit, factor: SPRINKLER_FLUSH.factor, qty: it.quantity, note: '喷淋系统专用冲洗定额'
+        });
+      }
+    }
+    return arr;
+  }
   var PLASTIC_OUT_DNS = [32, 40, 50, 63, 75, 90, 110, 125, 160, 200, 250, 315];
   var PLASTIC_IN_DNS = [20, 25, 32, 40, 50, 63, 75, 90, 110, 125, 160];
   var PLASTIC_DRAIN_DNS = [50, 75, 110, 160, 200, 250];
@@ -1080,6 +1181,28 @@
         }
       }
     }
+    // 消防水钢管（镀锌钢管/无缝钢管/焊接钢管/不锈钢管）：按页面所选管道系统套消防专用清单
+    // 消火栓管道 030901002 消火栓钢管 / 喷淋管道 030901001 水喷淋钢管
+    // 排除明确属给排水/燃气/室外的管道（这些仍按给排水口径 031001xxx + 第八册）
+    var isGasName = /燃气|煤气|天然气|液化气|气源|瓦斯/.test(name);
+    var isPlumbName = /给水|中水|生活水|生产水|排水|污水|废水|雨水|冷凝/.test(name);
+    var isOutName = /室外|户外|外网|庭院/.test(name);
+    if (FIRE_PIPE_SYS !== 'plumb' && !isGasName && !isPlumbName && !isOutName &&
+        (it.category === 'galv' || it.category === 'seamless' || it.category === 'welded')) {
+      it.isFirePipe = true;
+      it.pipeSystem = FIRE_PIPE_SYS;
+      var fl = FIRE_PIPE_LIST[it.pipeSystem] || FIRE_PIPE_LIST.sprinkler;
+      it.listCode = fl.code;
+      it.listName = fl.name;
+      if (it.pipeSystem === 'hydrant') {
+        it.joint = 'groove'; it.jointAuto = 'groove'; it.jointFallback = null;
+        if ((it.dn || 0) > 0 && it.dn < 65) it.jointNote = '消火栓管道按沟槽连接考虑，DN' + it.dn + ' 就近套用 DN65 沟槽子目';
+      } else if ((it.dn || 0) >= 65) {
+        it.joint = 'groove'; it.jointAuto = 'groove'; it.jointFallback = null;
+      } else {
+        it.joint = 'thread'; it.jointAuto = 'thread'; it.jointFallback = null;
+      }
+    }
     it.unit = 'm';
     return it;
   }
@@ -1399,6 +1522,7 @@
     if (isFireCat(it.category)) return matchFireQuota(it);
     if (isAuxCat(it.category)) return matchAuxQuota(it);
     if (isValveCat(it.category)) return matchValveQuota(it);
+    if (it.isFirePipe) return matchFirePipeQuota(it);
     if (PIPE_GROUPS[it.category]) {
       var g = groupOf(it);
       if (!g) return { code: '', name: '', inferred: false };
@@ -1445,6 +1569,7 @@
   function buildExtraQuotas(it, quota) {
     var arr = [];
     if (!quota || !quota.code) return arr;
+    if (it.isFirePipe) return buildFirePipeExtras(it, quota);   // 消防水钢管：沟槽管件×3 + 冲洗
     if (isValveCat(it.category)) return arr;   // 阀门及附件不计管道消毒冲洗/沟槽管件
     if (isAuxCat(it.category)) return arr;     // 支架/保温不计管道消毒冲洗/沟槽管件
     if (it.isFire) return arr;                 // 消防设备/配管配线桥架不计管道消毒冲洗/沟槽管件
@@ -1905,9 +2030,11 @@
   }
 
   // ---------- 解析整表 ----------
-  function parseRows(aoa, periodKey, format) {
+  function parseRows(aoa, periodKey, format, pipeSys) {
+    if (pipeSys) setFirePipeSystem(pipeSys);
     var results = [];
     var autoIdx = 0;
+    var curSystem = '';   // 当前系统分组名（来自清单里的分组标题行，如「喷淋管道」「消火栓管道」）
     for (var r = 0; r < aoa.length; r++) {
       var row = aoa[r] || [];
       var rawName = row[1];
@@ -1915,6 +2042,13 @@
       if (!name) continue;
       if (/序号/.test(String(row[0] || '')) && /名称/.test(name)) continue;
       if (/项目名称|管道名称|名称规格/.test(name) && !/\d/.test(name) && r < 5) continue;
+
+      // 分组标题行（如「喷淋管道」「消火栓管道」「消防电」）：无序号、无工程量、名称不含数字，
+      // 不是清单项——记为当前系统分组名后跳过，管道支架按系统分别补项
+      var qtyPre = parseFloat(row[2]);
+      if (!(qtyPre > 0) && !/\d/.test(name) && String(row[0] === undefined || row[0] === null ? '' : row[0]).trim() === '') {
+        curSystem = name; continue;
+      }
 
       var it = buildItem(name);
       if (!it) continue;
@@ -1954,9 +2088,14 @@
 
       recomputePrice(it, periodKey);
       it.features = featureText(it);
+      it.system = curSystem;   // 所属系统分组，管道支架按系统分套
       results.push(it);
     }
     var out = withDebug(withBracket(results));
+    // 有自动补项（支架）插入时，清单序号统一重排为连续 1..n
+    var hasAuto = false;
+    for (var qa = 0; qa < out.length; qa++) if (out[qa].autoAdded) hasAuto = true;
+    if (hasAuto) for (var qb = 0; qb < out.length; qb++) out[qb].index = String(qb + 1);
     out._periodKey = periodKey;
     out._format = format;
     return out;
@@ -2344,6 +2483,9 @@
   function currentFormat() {
     return (document.querySelector('input[name="software"]:checked') || {}).value || 'guanglianda';
   }
+  function currentPipeSystem() {
+    return (document.querySelector('input[name="pipeSystem"]:checked') || {}).value || 'sprinkler';
+  }
   function currentPeriod() {
     var el = document.getElementById('periodSelect');
     return el ? el.value : (getPeriods()[0] || {}).period;
@@ -2351,7 +2493,7 @@
 
   function refreshAll() {
     if (!window._rawAOA) return;
-    exportData = parseRows(window._rawAOA, currentPeriod(), currentFormat());
+    exportData = parseRows(window._rawAOA, currentPeriod(), currentFormat(), currentPipeSystem());
     renderTable(exportData);
     var area = document.getElementById('resultArea');
     var btn = document.getElementById('btnGroup');
@@ -2420,6 +2562,9 @@
     document.querySelectorAll('input[name="software"]').forEach(function (r) {
       r.addEventListener('change', refreshAll);
     });
+    document.querySelectorAll('input[name="pipeSystem"]').forEach(function (r) {
+      r.addEventListener('change', refreshAll);
+    });
 
     document.getElementById('resetBtn').addEventListener('click', function () {
       window._rawAOA = null;
@@ -2469,9 +2614,11 @@
       recomputeQuota: recomputeQuota, getPeriods: getPeriods,
       exportGLD: exportGLD, exportJianjing: exportJianjing,
       getData: function () { return exportData; },
+      setPipeSystem: setFirePipeSystem,
+      getPipeSystem: getFirePipeSystem,
       setAOA: function (aoa) {
         window._rawAOA = aoa;
-        exportData = parseRows(aoa, currentPeriod(), currentFormat());
+        exportData = parseRows(aoa, currentPeriod(), currentFormat(), currentPipeSystem());
         renderTable(exportData);
         return exportData;
       },
@@ -2515,6 +2662,8 @@
       AUX_LIST: AUX_LIST, AUX_LABEL: AUX_LABEL, isAuxCat: isAuxCat, auxCatOf: auxCatOf,
       buildAuxItem: buildAuxItem, matchAuxQuota: matchAuxQuota, auxPrice: auxPrice,
       bracketWeightPerM: bracketWeightPerM, withBracket: withBracket,
+      setFirePipeSystem: setFirePipeSystem, getFirePipeSystem: getFirePipeSystem,
+      matchFirePipeQuota: matchFirePipeQuota, buildFirePipeExtras: buildFirePipeExtras,
       fireCatOf: fireCatOf, elecCatOf: elecCatOf, F_LIST: F_LIST, F_LABEL: F_LABEL,
       matchFireQuota: matchFireQuota, matchElecQuota: matchElecQuota,
       firePrice: firePrice, elecPrice: elecPrice, withDebug: withDebug,

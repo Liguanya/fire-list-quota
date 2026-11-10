@@ -5,6 +5,9 @@ global.window = {};
 require('../data/prices.js');
 var A = require('../js/app.js');
 
+// 历史用例按通用给排水口径（不套消防清单）验证；消防管道专项用例在各自块内显式指定
+A.setFirePipeSystem('plumb');
+
 var pass = 0, fail = 0;
 function ck(name, got, want) {
   var ok = JSON.stringify(got) === JSON.stringify(want);
@@ -792,9 +795,10 @@ ck('已有调试不重复补', f4.length, 2);
 console.log('\n== 39. 消防水管道支架自动补项 ==');
 var g1 = A.parseRows([[1, '消防镀锌钢管 DN100', 120], [2, '点型感烟探测器（总线制）', 100]], '2026-10', 'guanglianda');
 ck('仅按管道补支架', g1.length, 3);
-ck('支架清单 031301005', g1[2].listCode, '031301005');
-ck('支架定额 7-138', g1[2].quotaCode, '7-138');
-ck('支架按120m DN100 = 108kg', g1[2].quantity, 108);
+ck('支架紧跟管道（不在末尾）', g1[1].category, 'bracket');
+ck('支架清单 031301005', g1[1].listCode, '031301005');
+ck('支架定额 7-138', g1[1].quotaCode, '7-138');
+ck('支架按120m DN100 = 108kg', g1[1].quantity, 108);
 
 console.log('\n== 40. 渲染与导出 ==');
 ck('类型列 消防电', A.itTypeOf(A.buildItem('点型感烟探测器（总线制）')), '点型探测器');
@@ -813,5 +817,66 @@ ck('水流指示器非阀门', pc('水流指示器 DN100'), 'flowIndicator');
 ck('末端试水阀非阀门', pc('末端试水阀 DN25'), 'testDevice');
 ck('消防泵未识别', pc('消防水泵'), 'other');
 
-console.log('\n结果: ' + pass + ' 通过, ' + fail + ' 失败');
+console.log('\n== 41. 消防水钢管：喷淋管道 / 消火栓管道 ==');
+function fp(name, qty, sys) {
+  return A.parseRows([[1, name, qty]], '2026-10', 'guanglianda', sys)[0];
+}
+// 喷淋管道 DN100（≥DN65：沟槽 8-206~8-212 + 管件×3 + 喷淋冲洗 7-70~7-75）
+var sp100 = fp('镀锌钢管 DN100', 120, 'sprinkler');
+ck('喷淋清单030901001', sp100.listCode, '030901001');
+ck('喷淋清单名水喷淋钢管', sp100.listName, '水喷淋钢管');
+ck('喷淋DN100定额8-208', sp100.quotaCode, '8-208');
+ck('喷淋DN100定额单位10m', sp100.quotaUnit, '10m');
+ck('喷淋DN100附加4项', sp100.extras.length, 4);
+ck('喷淋管件重复三次', sp100.extras.filter(function (e) { return e.code === '8-222'; }).length, 3);
+ck('喷淋管件量=ceil(120/6)', sp100.extras[0].qty, 20);
+ck('喷淋冲洗7-73', sp100.extras[3].code, '7-73');
+ck('喷淋冲洗单位100m', sp100.extras[3].unit, '100m');
+// 喷淋管道 DN50（<DN65：7-1~7-4 螺纹 + 仅喷淋冲洗）
+var sp50 = fp('镀锌钢管 DN50', 60, 'sprinkler');
+ck('喷淋DN50清单030901001', sp50.listCode, '030901001');
+ck('喷淋DN50定额7-4', sp50.quotaCode, '7-4');
+ck('喷淋DN50定额单位10m', sp50.quotaUnit, '10m');
+ck('喷淋DN50仅1项附加', sp50.extras.length, 1);
+ck('喷淋DN50冲洗7-70', sp50.extras[0].code, '7-70');
+// 喷淋管道 DN200（冲洗档 7-75）
+var sp200 = fp('无缝钢管 DN200', 60, 'sprinkler');
+ck('喷淋DN200定额8-211', sp200.quotaCode, '8-211');
+ck('喷淋DN200冲洗7-75', sp200.extras[3].code, '7-75');
+// 消火栓管道 DN100（一律沟槽 + 管件×3 + 消火栓冲洗 8-490~8-495）
+var hd100 = fp('无缝钢管 DN100', 120, 'hydrant');
+ck('消火栓清单030901002', hd100.listCode, '030901002');
+ck('消火栓清单名消火栓钢管', hd100.listName, '消火栓钢管');
+ck('消火栓DN100定额8-208', hd100.quotaCode, '8-208');
+ck('消火栓DN100附加4项', hd100.extras.length, 4);
+ck('消火栓冲洗8-491', hd100.extras[3].code, '8-491');
+// 消火栓管道 DN50（就近套 DN65 沟槽子目）
+var hd50 = fp('镀锌钢管 DN50', 60, 'hydrant');
+ck('消火栓DN50就近DN65沟槽8-206', hd50.quotaCode, '8-206');
+ck('消火栓DN50管件8-220', hd50.extras[0].code, '8-220');
+ck('消火栓DN50附加4项', hd50.extras.length, 4);
+// 导出：一项消火栓管道清单 = 1 管道定额 + 3 管件定额 + 1 冲洗定额 = 5 个定额
+var capF = null;
+global.XLSX = {
+  utils: {
+    aoa_to_sheet: function (d) { return d; },
+    book_new: function () { return {}; },
+    book_append_sheet: function (wb, ws) { wb.__rows = ws; }
+  },
+  writeFile: function (wb, name) { capF = wb.__rows; }
+};
+A.exportGLD([hd100]);
+ck('消防管道导出总行数', capF.length, 10);
+ck('消防管道导出定额行5个', capF.filter(function (r) { return r[9] === '定额行'; }).length, 5);
+ck('定额行号1.1/1.3~1.6（1.2为主材）', capF.filter(function (r) { return r[9] === '定额行'; }).map(function (r) { return r[0]; }).join(','), '1.1,1.3,1.4,1.5,1.6');
+ck('主材行紧跟管道定额', capF[3][9], '子目下设备');
+ck('管件三行编码一致', capF.filter(function (r) { return r[8] === '8-222'; }).length, 3);
+delete global.XLSX;
+// 排除：燃气/给水/室外管道仍按给排水口径
+ck('燃气仍给排水口径', fp('室内燃气镀锌钢管 DN50', 10, 'hydrant').listCode, '031001002');
+ck('给水仍给排水口径', fp('室内给水镀锌钢管 DN80', 10, 'hydrant').listCode, '031001002');
+ck('室外仍给排水口径', fp('室外镀锌钢管 DN100', 10, 'hydrant').listCode, '031001002');
+A.setFirePipeSystem('plumb');
+
+console.log('\n' + pass + ' 通过, ' + fail + ' 失败');
 if (fail) process.exit(1);

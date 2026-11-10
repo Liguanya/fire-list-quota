@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>消防智能组价平台</title>
-    <link rel="stylesheet" href="css/style.css?v=20261110d">
+    <link rel="stylesheet" href="css/style.css?v=20261110e">
     <style>
         /* ===== 专属样式 ===== */
         .control-bar {
@@ -85,6 +85,11 @@
                     <select id="periodSelect"></select>
                 </div>
                 <div class="ctl-group">
+                    <label>🚿 管道系统：</label>
+                    <label style="font-weight:400"><input type="radio" name="pipeSystem" value="sprinkler" checked>喷淋管道</label>
+                    <label style="font-weight:400"><input type="radio" name="pipeSystem" value="hydrant">消火栓管道</label>
+                </div>
+                <div class="ctl-group">
                     <label>📂 导出格式：</label>
                     <label style="font-weight:400"><input type="radio" name="software" value="guanglianda" checked>广联达</label>
                     <label style="font-weight:400"><input type="radio" name="software" value="jianjing">建经科技</label>
@@ -140,10 +145,10 @@
         </div>
     </div>
 
-    <script src="js/xlsx.full.min.js?v=20261110d"></script>
-    <script src="data/periods-2026.js?v=20261110d"></script>
-    <script src="data/prices.js?v=20261110d"></script>
-    <script src="data/periods-merge.js?v=20261110d"></script>
-    <script src="js/app.js?v=20261110d"></script>
+    <script src="js/xlsx.full.min.js?v=20261110e"></script>
+    <script src="data/periods-2026.js?v=20261110e"></script>
+    <script src="data/prices.js?v=20261110e"></script>
+    <script src="data/periods-merge.js?v=20261110e"></script>
+    <script src="js/app.js?v=20261110e"></script>
 </body>
 </html>
