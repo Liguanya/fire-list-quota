@@ -1925,12 +1925,12 @@
       parts.push(it.medium === 'drain' ? '灌水试验、通球试验' : '水压试验、水冲洗');
     } else if (it.category === 'galv') {
       parts.push('连接形式:' + (JOINT_CN2[it.joint] || '螺纹连接'));
-      if (it.joint === 'groove') parts.push('沟槽管件另计');
+      if (it.joint === 'groove') parts.push(it.isFirePipe ? '沟槽管件另套3项定额' : '沟槽管件另计');
       else parts.push('接口材料:' + (it.joint === 'gas_thread' ? '聚四氟乙烯生料带（燃气管道）' : '铅油麻丝、聚四氟乙烯生料带'));
       parts.push(it.joint === 'gas_thread' ? '气压试验、空气吹扫' : '水压试验、水冲洗');
     } else if (PIPE_GROUPS[it.category]) {
       parts.push('连接形式:' + (JOINT_CN2[it.joint] || '焊接'));
-      if (it.joint === 'groove') parts.push('沟槽管件另计');
+      if (it.joint === 'groove') parts.push(it.isFirePipe ? '沟槽管件另套3项定额' : '沟槽管件另计');
       else if (it.joint === 'weld' || it.joint === 'arc' || it.joint === 'argon' || it.joint === 'oxy' || it.joint === 'braze') parts.push('接口材料:焊条/焊丝');
       if (it.medium === 'gas') parts.push('气压试验、空气吹扫');
       else if (it.medium === 'drain') parts.push('灌水试验、通球试验');
@@ -2275,6 +2275,11 @@
   // 安装部位 / 接口形式 列
   function layCell(it) {
     if (it.isFire) return fireOptCell(it);
+    // 消防水钢管：连接方式由页面「管道系统」单选决定，不再提供逐行切换
+    if (it.isFirePipe) {
+      return '<span class="lay-static">' + (it.pipeSystem === 'hydrant' ? '消火栓管道' : '喷淋管道') + ' · ' +
+        (it.joint === 'groove' ? '沟槽连接' : '螺纹连接') + '</span>';
+    }
     if (isAuxCat(it.category)) return '<span class="lay-static">—</span>';
     if (isValveCat(it.category)) return '<span class="lay-static">—</span>';
     if (!isPriced(it)) {
