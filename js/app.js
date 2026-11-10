@@ -2024,7 +2024,7 @@
       if (it.category === 'galv') w.push('名称未注明给水/燃气，按给水（普通螺纹连接）套用，燃气管道请在选型列切换连接方式');
       else w.push('名称未注明给水/排水，按' + MEDIUM_CN[it.medium] + '套用，如不符请在名称中注明');
     }
-    if (it.locAmbiguous) w.push('名称未注明室内/室外，按室内套用，可在选型列切换');
+    if (it.locAmbiguous && !it.isFirePipe) w.push('名称未注明室内/室外，按室内套用，可在选型列切换');
     if (it.qtyWarn) w.push('工程量缺失，暂按1m计，请核对');
     return w.join('；');
   }
