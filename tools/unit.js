@@ -417,7 +417,7 @@ global.XLSX = {
 A.exportGLD([pr('无缝钢管 DN65 沟槽连接', 100)]);
 ck('广联达总行数', capG.length, 8);
 ck('广联达表头15列', capG[0].length, 15);
-ck('清单行项目编码', capG[1][8], '031001003');
+ck('清单行项目编码', capG[1][8], '031001003001');
 ck('清单行类型', capG[1][9], '清单行');
 ck('清单行单位m', capG[1][12], 'm');
 ck('清单行工程量', capG[1][13], 100);
@@ -877,6 +877,30 @@ ck('燃气仍给排水口径', fp('室内燃气镀锌钢管 DN50', 10, 'hydrant'
 ck('给水仍给排水口径', fp('室内给水镀锌钢管 DN80', 10, 'hydrant').listCode, '031001002');
 ck('室外仍给排水口径', fp('室外镀锌钢管 DN100', 10, 'hydrant').listCode, '031001002');
 A.setFirePipeSystem('plumb');
+
+console.log('\n== 12位清单编码（同码递增、异码各自001）==');
+global.XLSX = {
+  utils: {
+    aoa_to_sheet: function (d) { return d; },
+    book_new: function () { return {}; },
+    book_append_sheet: function (wb, ws) { wb.__rows = ws; }
+  },
+  writeFile: function (wb, name) { if (/建经/.test(name)) capJ = wb.__rows; else capG = wb.__rows; }
+};
+var capG = null, capJ = null;
+var c12 = A.parseRows([
+  [1, '室内镀锌钢管 DN50 螺纹连接', 100],
+  [2, '室内镀锌钢管 DN50 螺纹连接', 50]
+], '2026-10', 'glodon');
+A.exportGLD(c12);
+var lc12 = capG.filter(function (r) { return r[9] === '清单行'; }).map(function (r) { return r[8]; });
+ck('编码均为12位', lc12.every(function (c) { return /^\d{12}$/.test(c); }), true);
+var g12 = {};
+lc12.forEach(function (c) { var p = c.slice(0, 9); (g12[p] = g12[p] || []).push(c.slice(9)); });
+var dup12 = Object.keys(g12).filter(function (k) { return g12[k].length > 1; });
+ck('存在同码重复项', dup12.length > 0, true);
+ck('同码后缀001/002', dup12.length ? g12[dup12[0]].join(',') : '', '001,002');
+ck('首条后缀001', lc12[0].slice(9), '001');
 
 console.log('\n' + pass + ' 通过, ' + fail + ' 失败');
 if (fail) process.exit(1);
