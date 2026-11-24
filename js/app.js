@@ -38,6 +38,18 @@
   // 建经导出删清单编码列与项目特征列。无该参数（预算模式）时行为完全不变。
   var GS_MODE = /[?&]mode=gs(?:&|$)/.test((typeof location !== 'undefined' && location.search) || '');
 
+  // 补充规则共享模块（水表/水锤/水箱/套管/泵/洁具/阻火圈等，与给排水、暖通站同源）
+  var SP = (typeof window !== 'undefined' && window.PIPE_SPECIAL) ? window.PIPE_SPECIAL
+    : (typeof require === 'function' ? require('./special.js') : null);
+  // 附加定额自带主材（泵控制柜、焊接钢管等）金额合计
+  function extraMatAmt(d) {
+    var sum = 0;
+    ((d && d.extras) || []).forEach(function (x) {
+      if (x && x.mat && x.mat.price) sum += x.mat.price * (x.qty || 0);
+    });
+    return sum;
+  }
+
   // ---------- 清单编码 ----------
   var LIST = {
     castIron: { code: '031001001', name: '铸铁管' },
@@ -391,6 +403,14 @@
     if (/闸阀|截止阀|蝶阀|球阀|止回阀|逆止阀|Y型过滤器|y型过滤器|过滤器|软接头|橡胶软接头|补偿器|波纹补偿器|平衡阀|减压阀|水阀/.test(n)) return 'waterValve';
     if (/阀/.test(n) && parseVDn(n) && !/阀门井|阀室|阀门套/.test(n)) return 'waterValve';
     return null;
+  }
+  // 补充规则条目（与给排水、暖通站同源口径：清单/定额/主材/特征/提示/选型全部由模块给出）
+  function buildSpecialItem(name, cat) {
+    var it = SP.buildItem(name, cat);
+    it.special = true;
+    it.quantity = 1;
+    if (it.warn) it.specialWarn = it.warn;
+    return it;
   }
   function buildValveItem(name, cat) {
     var it = {};
@@ -1097,6 +1117,11 @@
     // 保温绝热 / 管道支架优先（名称里也含"管"字）
     var acat = auxCatOf(name);
     if (acat) return buildAuxItem(name, acat);
+    // 补充规则（水表/水锤/水箱/套管/泵/洁具/阻火圈等）：整段交给共享模块
+    if (SP) {
+      var scat = SP.catOf(name);
+      if (scat) return buildSpecialItem(name, scat);
+    }
     // 消防专业（消防电设备 / 消防水设备 / 配管配线桥架）
     var fcat = fireCatOf(name);
     if (fcat) {
@@ -1524,6 +1549,11 @@
 
   function matchQuota(it) {
     if (!it) return { code: '', name: '', inferred: false };
+    if (it.special) {
+      var sq = SP.matchQuota(it);
+      sq.keepList = true;
+      return sq;
+    }
     if (isElecCat(it.category)) return matchElecQuota(it);
     if (isFireCat(it.category)) return matchFireQuota(it);
     if (isAuxCat(it.category)) return matchAuxQuota(it);
@@ -1575,6 +1605,7 @@
   function buildExtraQuotas(it, quota) {
     var arr = [];
     if (!quota || !quota.code) return arr;
+    if (it.special) return SP.extras(it, quota);
     if (it.isFirePipe) return buildFirePipeExtras(it, quota);   // 消防水钢管：沟槽管件×3 + 冲洗
     if (isValveCat(it.category)) return arr;   // 阀门及附件不计管道消毒冲洗/沟槽管件
     if (isAuxCat(it.category)) return arr;     // 支架/保温不计管道消毒冲洗/沟槽管件
@@ -1700,7 +1731,7 @@
     return { price: r.price, source: 'market', basis: basis };
   }
 
-  function isPriced(it) { return it && (it.isFire || it.category === 'castIron' || it.category === 'galv' || !!PIPE_GROUPS[it.category] || isValveCat(it.category) || isAuxCat(it.category)); }
+  function isPriced(it) { return it && (it.special || it.isFire || it.category === 'castIron' || it.category === 'galv' || !!PIPE_GROUPS[it.category] || isValveCat(it.category) || isAuxCat(it.category)); }
 
   // ---------- 消防设备 / 配管配线桥架 主材价 ----------
   function firePriceTable(periodKey) {
@@ -1855,6 +1886,14 @@
   }
 
   function recomputePriceCore(it, periodKey) {
+    if (it.special) {
+      var spp = SP.price(it);
+      it.price = spp.price;
+      it.priceSource = spp.source;
+      it.priceBasis = spp.basis || '';
+      it.priceBrand = spp.brand || '';
+      return;
+    }
     if (it.isFire) {
       var fp = isElecCat(it.category) ? elecPrice(it, periodKey) : firePrice(it, periodKey);
       it.price = fp.price; it.priceSource = fp.source; it.priceBasis = fp.basis; it.priceBrand = fp.brand || '';
@@ -1975,6 +2014,7 @@
 
   // ---------- 项目特征 ----------
   function featureText(it) {
+    if (it.special) return SP.feature(it);
     if (it.isFire) {
       var ff = [];
       ff.push('名称:' + it.name);
@@ -2072,6 +2112,7 @@
 
   function buildWarn(it, quota) {
     var w = [];
+    if (it.special) return SP.warn(it, quota) || '';
     if (it.isFire) return buildFireWarn(it, quota);
     if (it.category === 'bracket') {
       w.push('管道支架工程量按管道长度与管径分档含量估算，定额 7-138 计量单位 100kg，请按图纸支架实际重量调整');
@@ -2226,7 +2267,9 @@
     var tip = item.priceBasis ? ' title="' + String(item.priceBasis).replace(/"/g, '&quot;') + '"' : '';
     if (item.priceSource === 'estimated') return '<span class="tag tag-est"' + tip + '>估</span> <span' + tip + '>¥' + item.price.toFixed(2) + '</span>';
     if (item.priceSource === 'db') return '<span class="tag tag-db"' + tip + '>数据库价</span> <span' + tip + '>¥' + item.price.toFixed(2) + '</span>' + (item.priceBrand ? ' <span class="price-brand" title="价格数据库报价品牌">' + escapeHtml(item.priceBrand) + '</span>' : '');
-    if (item.priceSource === 'market') return '<span class="tag tag-market"' + tip + '>市场价</span> <span' + tip + '>¥' + item.price.toFixed(2) + '</span>';
+    var mat2Tip = item.mat2 ? ' <span class="mat2-hint" title="该定额下需两个主材：管材 + 管件，导出表格分两行">＋管件¥' + item.mat2.price.toFixed(3) + '</span>' : '';
+    if (item.priceSource === 'fixed') return '<span class="tag tag-fixed"' + tip + '>固定价</span> <span' + tip + '>¥' + item.price.toFixed(2) + '</span>' + mat2Tip;
+    if (item.priceSource === 'market') return '<span class="tag tag-market"' + tip + '>市场价</span> <span' + tip + '>¥' + item.price.toFixed(2) + '</span>' + mat2Tip;
     return '<span class="tag tag-info"' + tip + '>信息价</span> <span' + tip + '>¥' + item.price.toFixed(2) + '</span>';
   }
   function inferTag(it) {
@@ -2356,6 +2399,7 @@
     return '—';
   }
   function itTypeOf(it) {
+    if (it.special) return SP.typeLabel(it);
     if (it.isFire) {
       if (it.genericHost) return '其他类型主机（按火灾报警口径）';
       return F_LABEL[it.category] || '消防';
@@ -2372,6 +2416,12 @@
 
   // 安装部位 / 接口形式 列
   function layCell(it) {
+    if (it.special) {
+      if (SP.hasOpts(it)) {
+        return sel('spopt', it._i, SP.opts(it).map(function (x) { return opt(x.k, it.specialOpt, x.l); }).join(''));
+      }
+      return '<span class="lay-static">—</span>';
+    }
     if (it.isFire) return fireOptCell(it);
     // 消防水钢管：连接方式由页面「管道系统」单选决定，不再提供逐行切换
     if (it.isFirePipe) {
@@ -2391,6 +2441,7 @@
   }
 
   function specCell(it) {
+    if (it.special) return SP.spec(it);
     if (it.isFire) return fireSpecText(it);
     if (isAuxCat(it.category)) {
       if (it.category === 'bracket') return '—';
@@ -2434,7 +2485,9 @@
     var waterN = data.filter(function (d) { return d.isFire && isFireWaterCat(d.category) && d.category !== 'fireDebug'; }).length;
     var other = data.length - elecN - waterN;
     var pending = data.filter(function (d) { return isPriced(d) && d.price === null && d.category !== 'fireDebug'; }).length;
-    var total = data.reduce(function (s, d) { return s + (d.price === null ? 0 : d.price * d.quantity); }, 0);
+    var total = data.reduce(function (s, d) {
+      return s + (d.price === null ? 0 : (d.price + (d.mat2 && d.mat2.price ? d.mat2.price : 0)) * d.quantity) + extraMatAmt(d);
+    }, 0);
 
     document.getElementById('totalCount').textContent = data.length;
     var elE = document.getElementById('catElec'); if (elE) elE.textContent = elecN;
@@ -2451,7 +2504,9 @@
         var act = s.getAttribute('data-act');
         var it = data[idx];
         if (!it) return;
-        if (act === 'loc') {
+        if (act === 'spopt') {
+          SP.setOpt(it, s.value);
+        } else if (act === 'loc') {
           it.loc = s.value;
           it.locAmbiguous = false;
           var allow = jointsOf(it);
@@ -2497,11 +2552,21 @@
     data.forEach(function (it) {
       wsData.push([it.index, it.listCode12 || it.listCode, it.name, it.quotaCode, it.quotaName,
         it.price === null ? '' : num2(it.price), it.quantity, it.features]);
+      if (it.mat2) {
+        wsData.push([it.index, it.listCode12 || it.listCode, it.mat2.name, '（管件主材，与管道同量计列）',
+          num2(it.mat2.price), it.quantity, it.mat2.name, '']);
+      }
       (it.extras || []).forEach(function (x) {
         wsData.push(['', '', '', x.code, x.name + '（数量' + round4(x.qty / (x.factor || 1)) + ' ' + x.unit + '）', '', '', '']);
+        if (x.mat) {
+          wsData.push([it.index, it.listCode12 || it.listCode, x.mat.name, '（附加定额主材）',
+            num2(x.mat.price), round4(x.qty / (x.factor || 1)), '', '']);
+        }
       });
     });
-    var total = data.reduce(function (s, d) { return s + (d.price === null ? 0 : d.price * d.quantity); }, 0);
+    var total = data.reduce(function (s, d) {
+      return s + (d.price === null ? 0 : (d.price + (d.mat2 && d.mat2.price ? d.mat2.price : 0)) * d.quantity) + extraMatAmt(d);
+    }, 0);
     wsData.push([]);
     wsData.push(['合计', '', '', '', '', num2(total), '', '']);
 
@@ -2520,6 +2585,7 @@
     data.forEach(function (it) {
       var c = String(it.listCode || '').trim();
       if (!c) { it.listCode12 = c; return; }
+      if (!/^\d/.test(c)) { it.listCode12 = c; return; }   // 补项等非数字编码原样输出
       seq[c] = (seq[c] || 0) + 1;
       var base = c.length < 9 ? c + new Array(10 - c.length).join('0') : c.slice(0, 9);
       it.listCode12 = base + ('00' + seq[c]).slice(-3);
@@ -2566,15 +2632,32 @@
           'Z00741-' + String(zIdx).padStart(3, '0'), '子目下设备', it.name, '', it.unit, it.quantity, num2(it.price)
         ]);
       }
+      if (it.mat2) {
+        zIdx++;
+        wsData.push([
+          it.index + '.' + (++sub), '', '', '', '', '', '', '',
+          'Z00741-' + String(zIdx).padStart(3, '0'), '子目下设备', it.mat2.name, '', it.unit, it.quantity, num2(it.mat2.price)
+        ]);
+      }
       (it.extras || []).forEach(function (x) {
         wsData.push([
           it.index + '.' + (++sub), '', '', '', '', '', '', '',
           x.code, '定额行', x.name, '', x.unit, round4(x.qty / (x.factor || 1)), ''
         ]);
+        if (x.mat) {
+          zIdx++;
+          wsData.push([
+            it.index + '.' + (++sub), '', '', '', '', '', '', '',
+            'Z00741-' + String(zIdx).padStart(3, '0'), '子目下设备', x.mat.name, '', x.unit,
+            round4(x.qty / (x.factor || 1)), num2(x.mat.price)
+          ]);
+        }
       });
     });
 
-    var total = data.reduce(function (s, d) { return s + (d.price === null ? 0 : d.price * d.quantity); }, 0);
+    var total = data.reduce(function (s, d) {
+      return s + (d.price === null ? 0 : (d.price + (d.mat2 && d.mat2.price ? d.mat2.price : 0)) * d.quantity) + extraMatAmt(d);
+    }, 0);
     wsData.push([]);
     wsData.push(['合计', '', '', '', '', '', '', '', '', '', '', '', '', '', num2(total)]);
 
@@ -2595,11 +2678,19 @@
     data.forEach(function (it) {
       wsData.push([it.index, it.name, it.quotaCode, it.quotaName,
         it.price === null ? '' : num2(it.price), it.quantity]);
+      if (it.mat2) {
+        wsData.push([it.index, it.mat2.name, '', '（管件主材，与管道同量计列）', num2(it.mat2.price), it.quantity]);
+      }
       (it.extras || []).forEach(function (x) {
         wsData.push(['', '', x.code, x.name + '（数量' + round4(x.qty / (x.factor || 1)) + ' ' + x.unit + '）', '', '']);
+        if (x.mat) {
+          wsData.push([it.index, x.mat.name, '', '（附加定额主材）', num2(x.mat.price), round4(x.qty / (x.factor || 1))]);
+        }
       });
     });
-    var total = data.reduce(function (s, d) { return s + (d.price === null ? 0 : d.price * d.quantity); }, 0);
+    var total = data.reduce(function (s, d) {
+      return s + (d.price === null ? 0 : (d.price + (d.mat2 && d.mat2.price ? d.mat2.price : 0)) * d.quantity) + extraMatAmt(d);
+    }, 0);
     wsData.push([]);
     wsData.push(['合计', '', '', '', num2(total), '']);
 
@@ -2635,13 +2726,26 @@
         wsData.push([it.index + '.' + (++sub), '', '', '', '', '', '', '',
           'Z00741-' + String(zIdx).padStart(3, '0'), '子目下设备', it.name, it.unit, it.quantity, num2(it.price)]);
       }
+      if (it.mat2) {
+        zIdx++;
+        wsData.push([it.index + '.' + (++sub), '', '', '', '', '', '', '',
+          'Z00741-' + String(zIdx).padStart(3, '0'), '子目下设备', it.mat2.name, it.unit, it.quantity, num2(it.mat2.price)]);
+      }
       (it.extras || []).forEach(function (x) {
         wsData.push([it.index + '.' + (++sub), '', '', '', '', '', '', '',
           x.code, '定额行', x.name, x.unit, round4(x.qty / (x.factor || 1)), '']);
+        if (x.mat) {
+          zIdx++;
+          wsData.push([it.index + '.' + (++sub), '', '', '', '', '', '', '',
+            'Z00741-' + String(zIdx).padStart(3, '0'), '子目下设备', x.mat.name, x.unit,
+            round4(x.qty / (x.factor || 1)), num2(x.mat.price)]);
+        }
       });
     });
 
-    var total = data.reduce(function (s, d) { return s + (d.price === null ? 0 : d.price * d.quantity); }, 0);
+    var total = data.reduce(function (s, d) {
+      return s + (d.price === null ? 0 : (d.price + (d.mat2 && d.mat2.price ? d.mat2.price : 0)) * d.quantity) + extraMatAmt(d);
+    }, 0);
     wsData.push([]);
     wsData.push(['合计', '', '', '', '', '', '', '', '', '', '', '', '', num2(total)]);
 
@@ -2843,6 +2947,7 @@
   // 暴露给Node测试
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
+      SP: SP,
       annotateListCode12: annotateListCode12,
       LIST: LIST, CAST_IRON: CAST_IRON, GALV: GALV, JOINT_CN: JOINT_CN,
       buildItem: buildItem, matchQuota: matchQuota, parseRows: parseRows,

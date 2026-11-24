@@ -61,6 +61,8 @@
         .price-brand { display: inline-block; margin-left: 3px; padding: 0 5px; border-radius: 8px; background: #e0f2f1; color: #00695c; font-size: 11px; border: 1px solid #b2dfdb; white-space: nowrap; }
         .tag-na { background: #eceff1; color: #607d8b; }
         .tag-infer { background: #e3f2fd; color: #1565c0; cursor: help; }
+        .tag-fixed { background: #fff3e0; color: #e65100; cursor: help; }
+        .mat2-hint { font-size: 11px; color: #00695c; }
         .legend { font-size: 12px; color: #888; margin: 6px 0 0; }
         @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
         /* 概算模式：不套清单编码与项目特征，隐藏对应列 */
@@ -128,7 +130,7 @@
 
             <div class="result-area" id="resultArea" style="display:none;">
                 <div class="result-header"><h2>📊 组价结果预览</h2></div>
-                <p class="legend">说明：<span class="tag tag-info">信息价</span>=天津市当月造价信息；<span class="tag tag-market">市场价</span>=信息价缺项按国产中高档市场价参考（悬停看品牌）；<span class="tag tag-pending">待询价</span>=暂无价格需人工补；<span class="tag tag-na">未计价</span>=该子目不计主材（如系统调试）；<span class="tag tag-infer">推</span>=定额按档位就近推算需核对；⚠️黄色行请人工核对。</p>
+                <p class="legend">说明：<span class="tag tag-info">信息价</span>=天津市当月造价信息；<span class="tag tag-market">市场价</span>=信息价缺项按国产中高档市场价参考（悬停看品牌）；<span class="tag tag-pending">待询价</span>=暂无价格需人工补；<span class="tag tag-na">未计价</span>=该子目不计主材（如系统调试）；<span class="tag tag-fixed">固定价</span>=按指定主材价计列；<span class="tag tag-infer">推</span>=定额按档位就近推算需核对；⚠️黄色行请人工核对。</p>
                 <div class="table-container">
                     <table id="resultTable">
                         <thead>
@@ -157,6 +159,7 @@
     <script src="data/prices.js?v=20261113a"></script>
     <script src="data/periods-merge.js?v=20261113a"></script>
     <script src="https://liguanya.github.io/jidian-list-system/price-db/js/db.js?v=20261113c"></script>
-    <script src="js/app.js?v=20261113c"></script>
+    <script src="js/special.js?v=20261124b"></script>
+    <script src="js/app.js?v=20261124b"></script>
 </body>
 </html>

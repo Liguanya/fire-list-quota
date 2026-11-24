@@ -462,8 +462,10 @@ var v2 = pr('Y型过滤器 DN150', 2);
 ck('过滤器DN150定额8-624', v2.quotaCode, '8-624');
 ck('过滤器信息价500', v2.price, 500);
 var v3 = pr('橡胶软接头 DN200', 2);
-ck('软接头市场价', v3.priceSource, 'market');
-ck('软接头标品牌', /冠龙/.test(v3.priceBrand || ''), true);
+ck('软接头清单031002008', v3.listCode, '031002008');
+ck('软接头DN200定额8-825', v3.quotaCode, '8-825');
+ck('软接头市场价390', v3.price, 390);
+ck('软接头价源market', v3.priceSource, 'market');
 var v4 = pr('波纹补偿器 DN300', 1);
 ck('补偿器DN300定额8-627', v4.quotaCode, '8-627');
 var v5 = pr('闸阀 DN32', 2);
@@ -815,7 +817,8 @@ ck('喷淋管道走管道', pc('喷淋镀锌钢管 DN100'), 'galv');
 ck('消防管道支架走支架', pc('消防管道支架'), 'bracket');
 ck('水流指示器非阀门', pc('水流指示器 DN100'), 'flowIndicator');
 ck('末端试水阀非阀门', pc('末端试水阀 DN25'), 'testDevice');
-ck('消防泵未识别', pc('消防水泵'), 'other');
+ck('消防泵走泵补充规则', pc('消防水泵'), 'pump');
+ck('消防泵清单031005001', A.buildItem('消防水泵').listCode, '031005001');
 
 console.log('\n== 41. 消防水钢管：喷淋管道 / 消火栓管道 ==');
 function fp(name, qty, sys) {
@@ -996,6 +999,140 @@ window.__priceDbRefresh();
 var _db2 = pr('室内消火栓 DN65');
 ck('库价更新后重取', Math.round(_db2.price * 100) / 100, 108.88);
 ck('更新后仍为数据库价', _db2.priceSource, 'db');
+
+console.log('\n== 补充规则（水暖同源）：水表 / 水锤 / 水箱 / 套管 / 泵 / 洁具 / 阻火圈 ==');
+var s1 = pr('水表 DN25', 1);
+ck('水表清单031002011', s1.listCode, '031002011');
+ck('水表DN25定额8-760', s1.quotaCode, '8-760');
+ck('水表单位个', s1.unit, '个');
+ck('水表DN25价78', s1.price, 78);
+ck('远传水表DN50转法兰8-768', pr('远传水表 DN50', 1).quotaCode, '8-768');
+ck('水表DN300定额8-774', pr('水表 DN300', 1).quotaCode, '8-774');
+
+var s2 = pr('水锤消除器 DN100', 1);
+ck('水锤清单031002016', s2.listCode, '031002016');
+ck('水锤DN100定额5-292', s2.quotaCode, '5-292');
+ck('水锤DN100主材879.786', s2.price, 879.786);
+ck('水锤DN80主材×0.8', pr('水锤消除器 DN80', 1).price, 703.829);
+ck('水锤DN300法兰5-296', pr('水锤消除器 DN300', 1).quotaCode, '5-296');
+
+ck('传感器清单030503005', pr('压力传感器', 1).listCode, '030503005');
+ck('传感器定额12-541', pr('压力传感器', 1).quotaCode, '12-541');
+ck('传感器主材1239.986', pr('压力传感器', 1).price, 1239.986);
+
+ck('消毒器清单031005012', pr('紫外线消毒器', 1).listCode, '031005012');
+ck('消毒器定额8-980', pr('紫外线消毒器', 1).quotaCode, '8-980');
+ck('消毒器主材3650.468', pr('紫外线消毒器', 1).price, 3650.468);
+
+var s3 = pr('消防水箱3000*5000*4000', 1);
+ck('水箱清单031005016', s3.listCode, '031005016');
+ck('水箱60m³定额8-917', s3.quotaCode, '8-917');
+ck('水箱主材75200', s3.price, 75200);
+ck('水箱单位台', s3.unit, '台');
+ck('水箱特征含容量', /60m³/.test(s3.features), true);
+ck('水箱保温不识别', A.buildItem('水箱保温').category, 'other');
+
+ck('喇叭口清单031002001', pr('溢流喇叭口 DN150', 1).listCode, '031002001');
+ck('喇叭口DN150定额8-624', pr('溢流喇叭口 DN150', 1).quotaCode, '8-624');
+ck('喇叭口DN150主材108.454', pr('溢流喇叭口 DN150', 1).price, 108.454);
+
+var s4 = pr('污水池', 1);
+ck('污水池清单031003004', s4.listCode, '031003004');
+ck('污水池定额8-848', s4.quotaCode, '8-848');
+ck('污水池主材309.735', s4.price, 309.735);
+
+ck('膨胀罐清单031005004', pr('膨胀罐', 1).listCode, '031005004');
+ck('膨胀罐定额8-1013', pr('膨胀罐', 1).quotaCode, '8-1013');
+ck('分集水器清单030113019001', pr('分集水器 DN400', 1).listCode, '030113019001');
+ck('分集水器定额10-004', pr('分集水器 DN400', 1).quotaCode, '10-004');
+
+var s5 = pr('循环泵 7.5kW', 2);
+ck('泵清单031005001', s5.listCode, '031005001');
+ck('泵定额1-690', s5.quotaCode, '1-690');
+ck('泵7.5kW价4500', s5.price, 4500);
+ck('泵附加控制箱2-303', (s5.extras[0] || {}).code, '2-303');
+ck('泵附加控制箱主材3800', (s5.extras[0].mat || {}).price, 3800);
+ck('泵附加控制箱数量=泵数', s5.extras[0].qty, 2);
+ck('泵特征含控制柜', /控制柜/.test(s5.features), true);
+
+var s6 = pr('柔性防水套管 DN100', 2);
+ck('柔性套管清单031301003', s6.listCode, '031301003');
+ck('柔性套管制作6-2980', s6.quotaCode, '6-2980');
+ck('柔性套管安装6-2996', (s6.extras[0] || {}).code, '6-2996');
+ck('柔性套管安装无主材', !!s6.extras[0].mat, false);
+var s6b = pr('刚性防水套管 DN200', 2);
+ck('刚性套管制作6-3009', s6b.quotaCode, '6-3009');
+ck('刚性套管安装6-3024', s6b.extras[0].code, '6-3024');
+ck('钢套管DN150定额6-3034', pr('钢套管 DN150', 1).quotaCode, '6-3034');
+ck('钢套管DN500定额6-3038', pr('钢套管 DN500', 1).quotaCode, '6-3038');
+
+ck('倒流防止器DN20主材238.598', pr('倒流防止器 DN20', 1).price, 238.598);
+ck('倒流防止器DN25主材×1.2', pr('倒流防止器 DN25', 1).price, 286.318);
+ck('止回阀仍走阀门8-622', pr('止回阀 DN100', 1).quotaCode, '8-622');
+
+ck('紧急喷淋清单031003010', pr('紧急喷淋', 1).listCode, '031003010');
+ck('紧急喷淋定额8-861', pr('紧急喷淋', 1).quotaCode, '8-861');
+ck('紧急喷淋单位组', pr('紧急喷淋', 1).unit, '组');
+
+var s7 = pr('电热水器', 1);
+ck('热水器清单031005013', s7.listCode, '031005013');
+ck('电热水器默认RS50W→8-961', s7.quotaCode, '8-961');
+ck('电热水器默认价2600', s7.price, 2600);
+ck('RS300立式→8-964', pr('热水器 RS300立式', 1).quotaCode, '8-964');
+ck('开水炉→8-965', pr('开水炉', 1).quotaCode, '8-965');
+ck('热水器有选型项', A.SP.hasOpts(A.buildItem('电热水器')), true);
+var s7it = A.buildItem('电热水器');
+A.SP.setOpt(s7it, 'RS100');
+ck('切RS100后定额8-963', A.matchQuota(s7it).code, '8-963');
+
+ck('洗手池按洗脸盆031003003', pr('洗手池', 1).listCode, '031003003');
+ck('洗手池定额8-839', pr('洗手池', 1).quotaCode, '8-839');
+ck('扫除口清单031003014', pr('扫除口', 1).listCode, '031003014');
+ck('扫除口默认8-947', pr('扫除口', 1).quotaCode, '8-947');
+ck('扫除口DN150→8-949', pr('扫除口 DN150', 1).quotaCode, '8-949');
+ck('阻火圈清单031001011', pr('阻火圈', 1).listCode, '031001011');
+ck('阻火圈默认8-810', pr('阻火圈', 1).quotaCode, '8-810');
+ck('阻火圈DN160→8-811', pr('阻火圈 DN160', 1).quotaCode, '8-811');
+
+// 上一轮 7 组首次同步到消防站
+ck('直埋保温管清单030801020', pr('直埋保温管 DN100', 10).listCode, '030801020');
+ck('直埋保温管定额8-146', pr('直埋保温管 DN100', 10).quotaCode, '8-146');
+var s8 = pr('PP排水静音管 DN50', 10);
+ck('PP排水清单031001008', s8.listCode, '031001008');
+ck('PP排水定额8-377', s8.quotaCode, '8-377');
+ck('PP排水管主材12.851', s8.price, 12.851);
+ck('PP排水管件6.108', s8.mat2.price, 6.108);
+ck('液位计清单031002001', pr('玻璃管液位计', 1).listCode, '031002001');
+ck('液位计定额10-77', pr('玻璃管液位计', 1).quotaCode, '10-77');
+ck('压力表定额10-25', pr('压力表 Y-100', 1).quotaCode, '10-25');
+ck('电接点压力表10-31', pr('电接点压力表 YXC-100', 1).quotaCode, '10-31');
+ck('软接头DN40定额8-816', pr('可曲挠橡胶软接头 DN40', 1).quotaCode, '8-816');
+
+// 导出：附加定额主材行 + 双主材 + 合计
+var capS = null, capSJ = null;
+global.XLSX.writeFile = function (wb, name) { if (/建经/.test(name)) capSJ = wb.__rows; else capS = wb.__rows; };
+var sExp = A.parseRows([[1, '循环泵 7.5kW', 2]], '2026-10', 'guanglianda');
+A.exportGLD(sExp);
+ck('广联达泵控制柜主材行', capS.filter(function (r) { return r[9] === '子目下设备' && /控制柜/.test(String(r[10])); }).length, 1);
+ck('广联达控制柜单价3800', capS.filter(function (r) { return /控制柜/.test(String(r[10])); })[0][14], 3800);
+ck('广联达控制箱定额行', capS.filter(function (r) { return r[9] === '定额行' && String(r[8]) === '2-303'; }).length, 1);
+A.exportJianjing(sExp);
+ck('建经泵控制柜主材行', capSJ.filter(function (r) { return /控制柜/.test(String(r[2])); }).length, 1);
+ck('建经控制柜价3800', capSJ.filter(function (r) { return /控制柜/.test(String(r[2])); })[0][4], 3800);
+A.exportGLDGs(sExp);
+ck('概算广联达控制柜行', capS.filter(function (r) { return r[9] === '子目下设备' && /控制柜/.test(String(r[10])); }).length, 1);
+A.exportJianjingGs(sExp);
+ck('概算建经控制柜行', capSJ.filter(function (r) { return /控制柜/.test(String(r[1])); }).length, 1);
+
+var sExp2 = A.parseRows([[1, 'PP排水静音管 DN100', 20]], '2026-10', 'guanglianda');
+A.exportGLD(sExp2);
+ck('消防站PP排水双主材两行', capS.filter(function (r) { return r[9] === '子目下设备' && /PP排水静音管/.test(String(r[10])); }).length, 2);
+A.exportJianjing(sExp2);
+ck('消防站建经PP管件行', capSJ.filter(function (r) { return /管件/.test(String(r[2])); }).length, 1);
+
+var sExp3 = A.parseRows([[1, '柔性防水套管 DN100', 2]], '2026-10', 'guanglianda');
+A.exportGLD(sExp3);
+ck('消防站套管导出含安装定额行', capS.filter(function (r) { return r[9] === '定额行' && /^6-299/.test(String(r[8])); }).length, 1);
 
 console.log('\n' + pass + ' 通过, ' + fail + ' 失败');
 if (fail) process.exit(1);
