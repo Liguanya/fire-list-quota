@@ -1221,7 +1221,9 @@
     if (FIRE_PIPE_SYS !== 'plumb' && !isGasName && !isPlumbName && !isOutName &&
         (it.category === 'galv' || it.category === 'seamless' || it.category === 'welded')) {
       it.isFirePipe = true;
-      it.pipeSystem = FIRE_PIPE_SYS;
+      // 名称含「消火栓」默认消火栓管道，含「喷淋/自动喷水」默认喷淋管道，其余沿用页面默认（喷淋）
+      it.pipeSystem = /消火栓/.test(name) ? 'hydrant'
+        : (/喷淋|自动喷水/.test(name) ? 'sprinkler' : FIRE_PIPE_SYS);
       var fl = FIRE_PIPE_LIST[it.pipeSystem] || FIRE_PIPE_LIST.sprinkler;
       it.listCode = fl.code;
       it.listName = fl.name;
@@ -2424,9 +2426,12 @@
     }
     if (it.isFire) return fireOptCell(it);
     // 消防水钢管：连接方式由页面「管道系统」单选决定，不再提供逐行切换
+    // 消防水钢管：管道系统（喷淋/消火栓）逐行选择，切换即重算清单与定额
     if (it.isFirePipe) {
-      return '<span class="lay-static">' + (it.pipeSystem === 'hydrant' ? '消火栓管道' : '喷淋管道') + ' · ' +
-        (it.joint === 'groove' ? '沟槽连接' : '螺纹连接') + '</span>';
+      var psHtml = opt('sprinkler', it.pipeSystem, '喷淋管道') + opt('hydrant', it.pipeSystem, '消火栓管道');
+      return '<div style="display:flex;flex-direction:column;gap:4px;">' + sel('pipeSystem', it._i, psHtml) +
+        '<span class="lay-static" style="font-size:12px;color:#5b6b73">' +
+        (it.joint === 'groove' ? '沟槽连接' : '螺纹连接') + '</span></div>';
     }
     if (isAuxCat(it.category)) return '<span class="lay-static">—</span>';
     if (isValveCat(it.category)) return '<span class="lay-static">—</span>';
@@ -2453,6 +2458,15 @@
     return p + it.dn;
   }
 
+  // 网页表格用：项目特征（与导出「项目特征」列同源，缺省时即时生成）
+  function featText(it) {
+    if (it.features) return it.features;
+    try {
+      return (typeof generateFeature === 'function' ? generateFeature('guanglianda', it)
+             : (typeof featureText === 'function' ? featureText(it) : '')) || '';
+    } catch (e) { return ''; }
+  }
+
   function renderTable(data) {
     annotateListCode12(data);
     var tbody = document.getElementById('tableBody');
@@ -2467,6 +2481,7 @@
         '<td class="cell-name" title="' + escapeHtml(item.name) + '">' + escapeHtml(item.name) + '</td>' +
         '<td>' + layCell(item) + '</td>' +
         '<td>' + specCell(item) + '</td>' +
+        '<td class="cell-feature col-feat"><div class="feat-box" title="' + escapeHtml(featText(item)) + '">' + escapeHtml(featText(item) || '—') + '</div></td>' +
         '<td class="cell-qcode">' + (item.quotaCode || '—') + (item.isFallback ? ' <span class="tag tag-fb">补项</span>' : '') + ' ' + inferTag(item) + '</td>' +
         '<td class="cell-qname" title="' + escapeHtml(item.quotaName + ((item.extras && item.extras.length) ? ' ＋ ' + item.extras.map(function (x) { return x.code + ' ' + x.name; }).join(' ＋ ') : '')) + '">' +
           escapeHtml(item.quotaName || '—') +
@@ -2506,6 +2521,21 @@
         if (!it) return;
         if (act === 'spopt') {
           SP.setOpt(it, s.value);
+        } else if (act === 'pipeSystem') {
+          // 逐行切换喷淋 / 消火栓管道：清单编码与连接方式随之改变
+          it.pipeSystem = (s.value === 'hydrant') ? 'hydrant' : 'sprinkler';
+          var _fl = FIRE_PIPE_LIST[it.pipeSystem] || FIRE_PIPE_LIST.sprinkler;
+          it.listCode = _fl.code;
+          it.listName = _fl.name;
+          it.jointNote = null;
+          if (it.pipeSystem === 'hydrant') {
+            it.joint = 'groove'; it.jointAuto = 'groove'; it.jointFallback = null;
+            if ((it.dn || 0) > 0 && it.dn < 65) it.jointNote = '消火栓管道按沟槽连接考虑，DN' + it.dn + ' 就近套用 DN65 沟槽子目';
+          } else if ((it.dn || 0) >= 65) {
+            it.joint = 'groove'; it.jointAuto = 'groove'; it.jointFallback = null;
+          } else {
+            it.joint = 'thread'; it.jointAuto = 'thread'; it.jointFallback = null;
+          }
         } else if (act === 'loc') {
           it.loc = s.value;
           it.locAmbiguous = false;
@@ -2861,7 +2891,7 @@
       var parts = [];
       Object.keys(nameMap).forEach(function (k) { if (cnt[k]) parts.push(nameMap[k] + ' ' + cnt[k] + ' 条'); });
       bar.textContent = '成功解析 ' + exportData.length + ' 条：' + parts.join('、') +
-        '；「选项 / 安装方式」列可切换走线制式、安装方式、点数档位、喷头吊顶、接合器型式等，定额与主材价实时重算；黄色行为需人工核对项';
+        '；「选项 / 安装方式」列可切换走线制式、安装方式、点数档位、喷头吊顶、接合器型式，消防水钢管可逐行切换「喷淋管道 / 消火栓管道」，定额与主材价实时重算；黄色行为需人工核对项';
     } else {
       area.style.display = 'none';
       btn.style.display = 'none';
